@@ -6,31 +6,35 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# Verifică dacă rsync este instalat; dacă nu, îl instalează automat
-if ! command -v rsync &> /dev/null; then
-    echo "Utilitarul rsync nu este instalat. Se va încerca instalarea automată."
-    pacman -S --noconfirm rsync
-fi
+# Directorul de bază pentru backup
+backup_base="/run/media/thinkroot99/1E30-9B9C/ArchBKUP"
+log_file="$backup_base/backup.log"
 
-# Destinația backup-ului (schimbă în funcție de locația dispozitivului tău de stocare)
-backup_destination="/mnt/backup"
+# Funcție pentru a înregistra în jurnal
+log() {
+    echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$log_file"
+}
 
-# Directoriile de pe sistemul de operare pe care vrei să le incluzi în backup
-source_directories=(
-    "/etc"
-    "/home"
-    "/var"
-    # Adaugă aici alte directoare pe care vrei să le incluzi
+# Crează directorul pentru backup cu un timestamp
+backup_directory="$backup_base/backup_$(date +'%Y-%m-%d_%H-%M-%S')"
+mkdir -p "$backup_directory"
+
+# Excluderi pentru rsync
+rsync_exclusions=(
+    --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found"}
+    --exclude={"/home/*/.cache/*","/home/*/.thumbnails/*","/home/*/.Trash/*"}
 )
 
-# Execută backup-ul utilizând rsync
-rsync_options="-aAXv --delete --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found"}"
+# Rulează rsync pentru a face backup
+rsync -aAXv "${rsync_exclusions[@]}" "/" "$backup_directory"
 
-echo "Începerea backup-ului..."
-for dir in "${source_directories[@]}"; do
-    echo "Backup director: $dir"
-    rsync $rsync_options "$dir" "$backup_destination"
-done
+# Înregistrează sfârșitul backup-ului și motivele
+if [ -d "$backup_directory" ]; then
+    log "Backup finalizat cu succes."
+else
+    log "Backupul nu a fost finalizat. Motiv: script oprit manual sau eroare la rsync."
+fi
 
-echo "Backup finalizat!"
-
+log "Backup finalizat!"
+echo "Backup finalizat!" >> "$log_file"
+exit 0
